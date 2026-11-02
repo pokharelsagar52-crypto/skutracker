@@ -245,10 +245,14 @@
             </form>
         </div>
     </div>
+    <script>
 // --- SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://avmrpctuzvulhtpzegpu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_ujBsN5DnbCANHpAYeh02g_1Htsr...'; 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+//Initialize app logic here
+initApp();
+</script>
     <script>
         const defaultCatalog = [
             { id: "BEER-GORKHA-500", name: "Gorkha Premium Strong Beer 500ml", category: "Beer", costPriceUnit: 280, sellingPriceUnit: 340, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 120 },
