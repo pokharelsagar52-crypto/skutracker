@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&N Cold Store - Inventory & Sales Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Html5-Qrcode Library for Live Camera Scanning -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col items-center justify-start p-4">
+
+    <!-- STORE SETUP / LOGIN MODAL -->
+    <div id="setupModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 px-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div class="text-center space-y-1">
+                <h2 class="text-2xl font-extrabold text-emerald-400">S&N Cold Store Portal</h2>
+                <p class="text-slate-400 text-xs">Enter your store details to load inventory & cash engines.</p>
+            </div>
+            <form onsubmit="handleStoreSetup(event)" class="space-y-4 text-sm">
+                <div>
+                    <label class="block text-slate-400 mb-1 text-xs font-semibold uppercase tracking-wider">Store Name</label>
+                    <input type="text" id="setupStoreName" required placeholder="e.g. S&N Cold Store - Bokse Chowk" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1 text-xs font-semibold uppercase tracking-wider">Owner / Manager Phone Number</label>
+                    <input type="tel" id="setupPhone" required placeholder="e.g. 9841000000" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+                </div>
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg transition shadow-lg shadow-emerald-900/30">
+                    Launch Store Dashboard 🚀
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="mainApp" class="max-w-4xl w-full mx-auto space-y-6 hidden">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-5 gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 id="headerStoreName" class="text-2xl font-extrabold tracking-tight text-emerald-400">S&N Cold Store</h1>
+                    <button onclick="logoutStore()" class="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 px-2 py-1 rounded border border-slate-800 transition" title="Switch Store / Logout">⚙️ Switch</button>
+                </div>
+                <p class="text-slate-400 text-xs mt-0.5">Manager Phone: <span id="headerPhone" class="text-slate-200 font-mono">---</span> | Weekly Cash-on-Cash Return Velocity</p>
+            </div>
+            <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+                <button onclick="openStockInModal()" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2">
+                    📦 Stock In (खरिद)
+                </button>
+                <button onclick="openSaleModal()" class="flex-1 sm:flex-none bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition shadow-lg shadow-cyan-900/30 flex items-center justify-center gap-2">
+                    🛒 Record Sale (बिक्री)
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Overview Cards -->
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
+                <div class="text-slate-400 text-[9px] font-semibold uppercase tracking-wider">Total Capital</div>
+                <div id="statTotalCapital" class="text-sm sm:text-base font-bold mt-0.5 text-slate-100">Rs. 0</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
+                <div class="text-slate-400 text-[9px] font-semibold uppercase tracking-wider">Monthly Return</div>
+                <div id="statMonthlyReturn" class="text-sm sm:text-base font-bold mt-0.5 text-emerald-400">Rs. 0</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
+                <div class="text-slate-400 text-[9px] font-semibold uppercase tracking-wider">Weekly Return/1k</div>
+                <div id="statPortfolioWeeklyReturn" class="text-sm sm:text-base font-bold mt-0.5 text-cyan-400">Rs. 0 / wk</div>
+            </div>
+        </div>
+
+        <!-- Cash Return Engine -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                    <h2 class="font-bold text-base text-slate-200">Cash Return Engine</h2>
+                    <p class="text-slate-400 text-xs">Simulate SKU velocity & weekly return per 1,000 Rs invested.</p>
+                </div>
+                <button onclick="resetDemoData()" class="text-xs text-slate-500 hover:text-slate-300 underline">Reset Catalog</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Select SKU for Simulation</label>
+                    <select id="calcSkuSelect" onchange="updateCalcPreview()" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-lg p-2 focus:outline-none focus:border-emerald-500"></select>
+                </div>
+                <div id="calcPreview" class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs space-y-1.5 flex flex-col justify-center">
+                    <div class="flex justify-between"><span class="text-slate-400">Stock Capital:</span> <span id="previewCapital" class="font-medium text-slate-200">Rs. 0</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Weekly Profit:</span> <span id="previewWeeklyProfit" class="font-medium text-slate-200">Rs. 0</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Return / 1,000 Rs / Wk:</span> <span id="previewReturn" class="font-bold text-emerald-400">Rs. 0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Collapsible Active SKU Catalog Dropdown -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden">
+            <button onclick="toggleCatalogDropdown()" class="w-full p-4 flex justify-between items-center bg-slate-900 hover:bg-slate-800/60 transition text-left">
+                <div class="flex items-center gap-3">
+                    <span class="font-bold text-base text-slate-200">Active SKU Catalog</span>
+                    <span id="statTotalSkusBadge" class="bg-slate-800 text-emerald-400 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-slate-700">0 SKUs</span>
+                </div>
+                <svg id="catalogChevron" class="w-5 h-5 text-slate-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            
+            <div id="catalogContent" class="hidden border-t border-slate-800">
+                <div class="p-4 border-b border-slate-800 bg-slate-950/40">
+                    <input type="text" id="searchInput" placeholder="Search SKU, name, or category..." onkeyup="renderTable()" class="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500 w-full">
+                </div>
+                <div class="overflow-x-auto max-h-[500px]">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-950/50 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider sticky top-0 backdrop-blur-md z-10">
+                                <th class="p-3">SKU & Name</th>
+                                <th class="p-3">Category</th>
+                                <th class="p-3 cursor-pointer hover:text-slate-200 transition" onclick="setSort('capital')">
+                                    Stock & Capital <span id="sortIndicator-capital" class="text-emerald-400">↕</span>
+                                </th>
+                                <th class="p-3 cursor-pointer hover:text-slate-200 transition" onclick="setSort('weeklyReturn1k')">
+                                    Return / 1k <span id="sortIndicator-weeklyReturn1k" class="text-emerald-400">↕</span>
+                                </th>
+                                <th class="p-3 cursor-pointer hover:text-slate-200 transition" onclick="setSort('totalWeeklyProfit')">
+                                    Total Weekly Profit <span id="sortIndicator-totalWeeklyProfit" class="text-emerald-400">↕</span>
+                                </th>
+                                <th class="p-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skuTableBody" class="divide-y divide-slate-800/60"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: Stock In (खरिद) -->
+    <div id="stockInModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center hidden z-50 px-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-emerald-400">📦 Stock In (खरिद)</h3>
+                <button type="button" onclick="startScanner('stockIn')" class="bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-900 transition flex items-center gap-1.5">
+                    📷 Scan Barcode
+                </button>
+            </div>
+
+            <!-- Scanner Viewfinder Container -->
+            <div id="stockInScannerContainer" class="mb-4 hidden">
+                <div id="stockInReader" class="w-full rounded-lg overflow-hidden border border-emerald-600/50"></div>
+                <button type="button" onclick="stopScanner('stockIn')" class="mt-2 w-full bg-rose-950/60 border border-rose-800 text-rose-300 text-xs py-1.5 rounded-lg">Close Camera</button>
+            </div>
+
+            <form id="stockInForm" onsubmit="handleStockInSubmit(event)" class="space-y-4 text-sm">
+                <div class="relative">
+                    <label class="block text-slate-400 mb-1">SKU ID Code or Barcode</label>
+                    <input type="text" id="stockInId" required autocomplete="off" oninput="handleStockInIdInput(this.value)" placeholder="Scan or type SKU ID..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono">
+                    <div id="stockInIdSuggestions" class="absolute left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto hidden z-50 shadow-xl"></div>
+                </div>
+                <div class="relative">
+                    <label class="block text-slate-400 mb-1">Product Name & Volume</label>
+                    <input type="text" id="stockInName" required autocomplete="off" oninput="handleStockInNameInput(this.value)" placeholder="Type to search product name..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    <div id="stockInNameSuggestions" class="absolute left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto hidden z-50 shadow-xl"></div>
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Category</label>
+                    <select id="stockInCategory" onchange="handleCategoryChange(this)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Cost Price (Rs)</label>
+                        <input type="number" step="0.1" id="stockInCost" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Selling Price (Rs)</label>
+                        <input type="number" step="0.1" id="stockInSell" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Units/Box</label>
+                        <input type="number" id="stockInUnitsPerBox" required value="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Full Boxes (+)</label>
+                        <input type="number" id="stockInBoxes" required value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Loose Units (+)</label>
+                        <input type="number" id="stockInLooseUnits" required value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="closeStockInModal()" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-500 transition">Add Stock In</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Record a Sale (बिक्री) -->
+    <div id="saleModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center hidden z-50 px-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-cyan-400">🛒 Record Sale (बिक्री)</h3>
+                <button type="button" onclick="startScanner('sale')" class="bg-cyan-950/80 border border-cyan-700 text-cyan-300 text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-cyan-900 transition flex items-center gap-1.5">
+                    📷 Scan Barcode
+                </button>
+            </div>
+
+            <!-- Scanner Viewfinder Container -->
+            <div id="saleScannerContainer" class="mb-4 hidden">
+                <div id="saleReader" class="w-full rounded-lg overflow-hidden border border-cyan-600/50"></div>
+                <button type="button" onclick="stopScanner('sale')" class="mt-2 w-full bg-rose-950/60 border border-rose-800 text-rose-300 text-xs py-1.5 rounded-lg">Close Camera</button>
+            </div>
+
+            <form id="saleForm" onsubmit="handleSaleSubmit(event)" class="space-y-4 text-sm">
+                <div class="relative">
+                    <label class="block text-slate-400 mb-1">SKU ID Code or Barcode</label>
+                    <input type="text" id="saleId" required autocomplete="off" oninput="handleSaleIdInput(this.value)" placeholder="Scan or type SKU ID..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                    <div id="saleIdSuggestions" class="absolute left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto hidden z-50 shadow-xl"></div>
+                </div>
+                <div class="relative">
+                    <label class="block text-slate-400 mb-1">Product Name & Volume</label>
+                    <input type="text" id="saleName" required autocomplete="off" oninput="handleSaleNameInput(this.value)" placeholder="Type to search product name..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500">
+                    <div id="saleNameSuggestions" class="absolute left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg mt-1 max-h-40 overflow-y-auto hidden z-50 shadow-xl"></div>
+                </div>
+                <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-400 flex justify-between items-center">
+                    <span>Current Stock Available:</span>
+                    <span id="saleCurrentStockDisplay" class="font-bold text-slate-200">0 units</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Boxes Sold (-)</label>
+                        <input type="number" id="saleBoxesSold" required min="0" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Loose Units Sold (-)</label>
+                        <input type="number" id="saleLooseSold" required min="0" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Custom Price (Optional)</label>
+                    <input type="number" step="0.1" id="saleCustomPrice" placeholder="Leave blank for standard" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500">
+                </div>
+                <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="closeSaleModal()" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-cyan-600 text-white font-medium hover:bg-cyan-500 transition">Confirm Sale</button>
+                </div>
+            </form>
+        </div>
+    </div>
+// --- SUPABASE CONFIGURATION ---
+const SUPABASE_URL = 'https://avmrpctuzvulhtpzegpu.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ujBsN5DnbCANHpAYeh02g_1Htsr...'; 
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    <script>
+        const defaultCatalog = [
+            { id: "BEER-GORKHA-500", name: "Gorkha Premium Strong Beer 500ml", category: "Beer", costPriceUnit: 280, sellingPriceUnit: 340, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 120 },
+            { id: "BEER-GORKHA-330", name: "Gorkha Premium Strong Beer 330ml", category: "Beer", costPriceUnit: 200, sellingPriceUnit: 250, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 90 },
+            { id: "BEER-GORKHA-650", name: "Gorkha Premium Strong Beer 650ml", category: "Beer", costPriceUnit: 350, sellingPriceUnit: 420, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 150 },
+            { id: "BEER-CARLSBERG-650", name: "Carlsberg Danish Pilsner 650ml", category: "Beer", costPriceUnit: 380, sellingPriceUnit: 460, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 80 },
+            { id: "BEER-TUBORG-330", name: "Tuborg Premium Gold 330ml", category: "Beer", costPriceUnit: 220, sellingPriceUnit: 270, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 110 },
+            { id: "BEER-TUBORG-500", name: "Tuborg Premium Gold 500ml", category: "Beer", costPriceUnit: 300, sellingPriceUnit: 370, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 130 },
+            { id: "BEER-TUBORG-650", name: "Tuborg Premium Gold 650ml", category: "Beer", costPriceUnit: 390, sellingPriceUnit: 470, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 160 },
+            { id: "BEER-GPIL-330", name: "Gorkha Pilsner 330ml", category: "Beer", costPriceUnit: 190, sellingPriceUnit: 240, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 70 },
+            { id: "BEER-BISON-650", name: "Bison Super Strong Beer 650ml", category: "Beer", costPriceUnit: 310, sellingPriceUnit: 380, unitsPerBox: 12, boxes: 18, looseUnits: 0, monthlyUnitsSold: 95 },
+            { id: "BEER-BISON-330", name: "Bison Super Strong Beer 330ml", category: "Beer", costPriceUnit: 180, sellingPriceUnit: 230, unitsPerBox: 24, boxes: 12, looseUnits: 0, monthlyUnitsSold: 60 },
+            { id: "BEER-THAMEL-330", name: "Thamel Dry Hopped Lager 330ml", category: "Beer", costPriceUnit: 240, sellingPriceUnit: 300, unitsPerBox: 24, boxes: 10, looseUnits: 0, monthlyUnitsSold: 50 },
+            { id: "BEER-THAMEL-650", name: "Thamel Dry Hopped Lager 650ml", category: "Beer", costPriceUnit: 410, sellingPriceUnit: 490, unitsPerBox: 12, boxes: 12, looseUnits: 0, monthlyUnitsSold: 65 },
+            { id: "BEER-GORKHAU-330", name: "Gorkha Unfiltered 330ml", category: "Beer", costPriceUnit: 230, sellingPriceUnit: 290, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 85 },
+            { id: "WINE-MANANG-750", name: "Manang Valley Premium Sweet Wine 750ml", category: "Wine", costPriceUnit: 550, sellingPriceUnit: 680, unitsPerBox: 12, boxes: 10, looseUnits: 0, monthlyUnitsSold: 40 },
+            { id: "WINE-BIGMASTER-750", name: "Big Master Perfect Fruit Red Wine 750ml", category: "Wine", costPriceUnit: 500, sellingPriceUnit: 620, unitsPerBox: 12, boxes: 12, looseUnits: 0, monthlyUnitsSold: 45 },
+            { id: "WINE-BIGMASTER-375", name: "Big Master Perfect Fruit Red Wine 375ml", category: "Wine", costPriceUnit: 280, sellingPriceUnit: 350, unitsPerBox: 24, boxes: 10, looseUnits: 0, monthlyUnitsSold: 35 },
+            { id: "VODKA-8848-180", name: "8848 Vodka 180ml", category: "Vodka", costPriceUnit: 320, sellingPriceUnit: 390, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 110 },
+            { id: "VODKA-8848-375", name: "8848 Vodka 375ml", category: "Vodka", costPriceUnit: 620, sellingPriceUnit: 750, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 80 },
+            { id: "VODKA-8848-750", name: "8848 Vodka 750ml", category: "Vodka", costPriceUnit: 1200, sellingPriceUnit: 1450, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 60 },
+            { id: "VODKA-YETI-750", name: "Yeti Vodka 750ml", category: "Vodka", costPriceUnit: 950, sellingPriceUnit: 1150, unitsPerBox: 12, boxes: 10, looseUnits: 0, monthlyUnitsSold: 40 },
+            { id: "VODKA-YETI-180", name: "Yeti Vodka 180ml", category: "Vodka", costPriceUnit: 260, sellingPriceUnit: 320, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 50 },
+            { id: "VODKA-8PEAKS-180", name: "8 Peaks Vodka 180ml", category: "Vodka", costPriceUnit: 270, sellingPriceUnit: 330, unitsPerBox: 24, boxes: 12, looseUnits: 0, monthlyUnitsSold: 45 },
+            { id: "VODKA-HIGH-180", name: "Highlander Vodka 180ml", category: "Vodka", costPriceUnit: 250, sellingPriceUnit: 310, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 90 },
+            { id: "VODKA-HIGH-375", name: "Highlander Vodka 375ml", category: "Vodka", costPriceUnit: 500, sellingPriceUnit: 600, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 65 },
+            { id: "VODKA-HIGH-750", name: "Highlander Vodka 750ml", category: "Vodka", costPriceUnit: 980, sellingPriceUnit: 1180, unitsPerBox: 12, boxes: 12, looseUnits: 0, monthlyUnitsSold: 50 },
+            { id: "VODKA-SILVER-180", name: "Silver Oak Vodka 180ml", category: "Vodka", costPriceUnit: 280, sellingPriceUnit: 340, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 70 },
+            { id: "VODKA-SILVER-750", name: "Silver Oak Vodka 750ml", category: "Vodka", costPriceUnit: 1050, sellingPriceUnit: 1280, unitsPerBox: 12, boxes: 10, looseUnits: 0, monthlyUnitsSold: 40 },
+            { id: "WHISKEY-OLDD-750", name: "Old Durbar Whiskey 750ml", category: "Whiskey", costPriceUnit: 1500, sellingPriceUnit: 1800, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 130 },
+            { id: "WHISKEY-OLDD-180", name: "Old Durbar Whiskey 180ml", category: "Whiskey", costPriceUnit: 390, sellingPriceUnit: 470, unitsPerBox: 24, boxes: 25, looseUnits: 0, monthlyUnitsSold: 180 },
+            { id: "WHISKEY-GG-180", name: "Gurkhas and Guns Whiskey 180ml", category: "Whiskey", costPriceUnit: 310, sellingPriceUnit: 380, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 75 },
+            { id: "WHISKEY-GG-350", name: "Gurkhas and Guns Whiskey 350ml", category: "Whiskey", costPriceUnit: 580, sellingPriceUnit: 700, unitsPerBox: 12, boxes: 12, looseUnits: 0, monthlyUnitsSold: 50 },
+            { id: "WHISKEY-GG-750", name: "Gurkhas and Guns Whiskey 750ml", category: "Whiskey", costPriceUnit: 1150, sellingPriceUnit: 1390, unitsPerBox: 12, boxes: 10, looseUnits: 0, monthlyUnitsSold: 40 },
+            { id: "WHISKEY-SIG-180", name: "Signature Premium Grain Whiskey 180ml", category: "Whiskey", costPriceUnit: 350, sellingPriceUnit: 420, unitsPerBox: 24, boxes: 18, looseUnits: 0, monthlyUnitsSold: 90 },
+            { id: "WHISKEY-SIG-350", name: "Signature Premium Grain Whiskey 350ml", category: "Whiskey", costPriceUnit: 650, sellingPriceUnit: 790, unitsPerBox: 12, boxes: 14, looseUnits: 0, monthlyUnitsSold: 60 },
+            { id: "WHISKEY-SIG-750", name: "Signature Premium Grain Whiskey 750ml", category: "Whiskey", costPriceUnit: 1300, sellingPriceUnit: 1580, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 70 },
+            { id: "WHISKEY-CHAL-180", name: "Challenger Whiskey 180ml", category: "Whiskey", costPriceUnit: 290, sellingPriceUnit: 350, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 60 },
+            { id: "WHISKEY-GOLDEN-180", name: "Golden Oak Premium Blended Malt 180ml", category: "Whiskey", costPriceUnit: 280, sellingPriceUnit: 340, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 100 },
+            { id: "WHISKEY-GOLDEN-350", name: "Golden Oak Premium Blended Malt 350ml", category: "Whiskey", costPriceUnit: 530, sellingPriceUnit: 640, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 65 },
+            { id: "WHISKEY-GOLDEN-750", name: "Golden Oak Premium Blended Malt 750ml", category: "Whiskey", costPriceUnit: 1050, sellingPriceUnit: 1280, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 70 },
+            { id: "WHISKEY-SHLOK-180", name: "Shlok Whiskey 180ml", category: "Whiskey", costPriceUnit: 270, sellingPriceUnit: 330, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 55 },
+            { id: "WHISKEY-SHLOK-750", name: "Shlok Whiskey 750ml", category: "Whiskey", costPriceUnit: 1000, sellingPriceUnit: 1220, unitsPerBox: 12, boxes: 10, looseUnits: 0, monthlyUnitsSold: 35 },
+            { id: "WHISKEY-MYDEAR-180", name: "My Dear Whiskey 180ml", category: "Whiskey", costPriceUnit: 260, sellingPriceUnit: 320, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 50 },
+            { id: "RUM-KHUKURI-750", name: "Khukuri 3X Rum 750ml", category: "Rum", costPriceUnit: 1100, sellingPriceUnit: 1350, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 160 },
+            { id: "RUM-KHUKURI-180", name: "Khukuri 3X Rum 180ml", category: "Rum", costPriceUnit: 300, sellingPriceUnit: 370, unitsPerBox: 24, boxes: 30, looseUnits: 0, monthlyUnitsSold: 210 },
+            { id: "SOFT-COKE-225", name: "Coca Cola 2.25L", category: "Soft Drink", costPriceUnit: 240, sellingPriceUnit: 280, unitsPerBox: 6, boxes: 20, looseUnits: 0, monthlyUnitsSold: 150 },
+            { id: "SOFT-COKE-150", name: "Coca Cola 1.5L", category: "Soft Drink", costPriceUnit: 170, sellingPriceUnit: 200, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 200 },
+            { id: "SOFT-COKE-100", name: "Coca Cola 1L", category: "Soft Drink", costPriceUnit: 120, sellingPriceUnit: 145, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 180 },
+            { id: "SOFT-COKE-500", name: "Coca Cola 500ml", category: "Soft Drink", costPriceUnit: 70, sellingPriceUnit: 90, unitsPerBox: 24, boxes: 30, looseUnits: 0, monthlyUnitsSold: 250 },
+            { id: "SOFT-COKE-250", name: "Coca Cola 250ml", category: "Soft Drink", costPriceUnit: 35, sellingPriceUnit: 45, unitsPerBox: 30, boxes: 25, looseUnits: 0, monthlyUnitsSold: 300 },
+            { id: "SOFT-SPRITE-225", name: "Sprite 2.25L", category: "Soft Drink", costPriceUnit: 240, sellingPriceUnit: 280, unitsPerBox: 6, boxes: 20, looseUnits: 0, monthlyUnitsSold: 140 },
+            { id: "SOFT-SPRITE-150", name: "Sprite 1.5L", category: "Soft Drink", costPriceUnit: 170, sellingPriceUnit: 200, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 190 },
+            { id: "SOFT-SPRITE-100", name: "Sprite 1L", category: "Soft Drink", costPriceUnit: 120, sellingPriceUnit: 145, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 170 },
+            { id: "SOFT-SPRITE-500", name: "Sprite 500ml", category: "Soft Drink", costPriceUnit: 70, sellingPriceUnit: 90, unitsPerBox: 24, boxes: 30, looseUnits: 0, monthlyUnitsSold: 240 },
+            { id: "SOFT-SPRITE-250", name: "Sprite 250ml", category: "Soft Drink", costPriceUnit: 35, sellingPriceUnit: 45, unitsPerBox: 30, boxes: 25, looseUnits: 0, monthlyUnitsSold: 290 },
+            { id: "SOFT-FANTA-225", name: "Fanta 2.25L", category: "Soft Drink", costPriceUnit: 240, sellingPriceUnit: 280, unitsPerBox: 6, boxes: 20, looseUnits: 0, monthlyUnitsSold: 130 },
+            { id: "SOFT-FANTA-150", name: "Fanta 1.5L", category: "Soft Drink", costPriceUnit: 170, sellingPriceUnit: 200, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 170 },
+            { id: "SOFT-FANTA-100", name: "Fanta 1L", category: "Soft Drink", costPriceUnit: 120, sellingPriceUnit: 145, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 160 },
+            { id: "SOFT-FANTA-500", name: "Fanta 500ml", category: "Soft Drink", costPriceUnit: 70, sellingPriceUnit: 90, unitsPerBox: 24, boxes: 30, looseUnits: 0, monthlyUnitsSold: 220 },
+            { id: "SOFT-FANTA-250", name: "Fanta 250ml", category: "Soft Drink", costPriceUnit: 35, sellingPriceUnit: 45, unitsPerBox: 30, boxes: 25, looseUnits: 0, monthlyUnitsSold: 270 },
+            { id: "SOFT-DEW-225", name: "Mountain Dew 2.25L", category: "Soft Drink", costPriceUnit: 240, sellingPriceUnit: 280, unitsPerBox: 6, boxes: 20, looseUnits: 0, monthlyUnitsSold: 150 },
+            { id: "SOFT-DEW-150", name: "Mountain Dew 1.5L", category: "Soft Drink", costPriceUnit: 170, sellingPriceUnit: 200, unitsPerBox: 12, boxes: 25, looseUnits: 0, monthlyUnitsSold: 210 },
+            { id: "SOFT-DEW-100", name: "Mountain Dew 1L", category: "Soft Drink", costPriceUnit: 120, sellingPriceUnit: 145, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 190 },
+            { id: "SOFT-DEW-500", name: "Mountain Dew 500ml", category: "Soft Drink", costPriceUnit: 70, sellingPriceUnit: 90, unitsPerBox: 24, boxes: 30, looseUnits: 0, monthlyUnitsSold: 260 },
+            { id: "SOFT-DEW-250", name: "Mountain Dew 250ml", category: "Soft Drink", costPriceUnit: 35, sellingPriceUnit: 45, unitsPerBox: 30, boxes: 25, looseUnits: 0, monthlyUnitsSold: 320 },
+            { id: "SOFT-MACHODEW-225", name: "Macho Dew 2.25L", category: "Soft Drink", costPriceUnit: 230, sellingPriceUnit: 270, unitsPerBox: 6, boxes: 15, looseUnits: 0, monthlyUnitsSold: 100 },
+            { id: "SOFT-MACHODEW-150", name: "Macho Dew 1.5L", category: "Soft Drink", costPriceUnit: 160, sellingPriceUnit: 190, unitsPerBox: 12, boxes: 18, looseUnits: 0, monthlyUnitsSold: 120 },
+            { id: "SOFT-MACHODEW-600", name: "Macho Dew 600ml", category: "Soft Drink", costPriceUnit: 75, sellingPriceUnit: 95, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 140 },
+            { id: "SOFT-MACHODEW-250", name: "Macho Dew 250ml", category: "Soft Drink", costPriceUnit: 30, sellingPriceUnit: 40, unitsPerBox: 30, boxes: 20, looseUnits: 0, monthlyUnitsSold: 180 },
+            { id: "ENERG-XTREME-330", name: "Xtreme Energy Drink 330ml", category: "Energy Drink", costPriceUnit: 90, sellingPriceUnit: 120, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 150 },
+            { id: "ENERG-MAXTIGER-330", name: "Max Tiger Energy Drink 330ml", category: "Energy Drink", costPriceUnit: 85, sellingPriceUnit: 110, unitsPerBox: 24, boxes: 18, looseUnits: 0, monthlyUnitsSold: 130 },
+            { id: "ENERG-REDBULL-250", name: "Red Bull Energy Drink 250ml", category: "Energy Drink", costPriceUnit: 180, sellingPriceUnit: 230, unitsPerBox: 24, boxes: 25, looseUnits: 0, monthlyUnitsSold: 200 },
+            { id: "ENERG-REDBULL-330", name: "Red Bull Energy Drink 330ml", category: "Energy Drink", costPriceUnit: 220, sellingPriceUnit: 280, unitsPerBox: 24, boxes: 15, looseUnits: 0, monthlyUnitsSold: 110 },
+            { id: "BEV-ATM-180", name: "ATM Badam Drink 180ml", category: "Other Beverage", costPriceUnit: 40, sellingPriceUnit: 55, unitsPerBox: 30, boxes: 15, looseUnits: 0, monthlyUnitsSold: 120 },
+            { id: "BEV-JUSICA-180", name: "Jusica Badam Drink 180ml", category: "Other Beverage", costPriceUnit: 38, sellingPriceUnit: 50, unitsPerBox: 30, boxes: 15, looseUnits: 0, monthlyUnitsSold: 110 },
+            { id: "BEV-FROOTI-100", name: "Goodlife Mango Frooti 100ml", category: "Other Beverage", costPriceUnit: 15, sellingPriceUnit: 20, unitsPerBox: 40, boxes: 30, looseUnits: 0, monthlyUnitsSold: 350 },
+            { id: "BEV-LEMONZA-250", name: "Lemonza Nimbu Pani 250ml", category: "Other Beverage", costPriceUnit: 30, sellingPriceUnit: 40, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 160 },
+            { id: "BEV-JUSICALIT-150", name: "Jusica Litchi Drink 150ml", category: "Other Beverage", costPriceUnit: 20, sellingPriceUnit: 30, unitsPerBox: 30, boxes: 20, looseUnits: 0, monthlyUnitsSold: 170 },
+            { id: "BEV-PERNALIT-100", name: "Perna Litchi Drink 100ml", category: "Other Beverage", costPriceUnit: 15, sellingPriceUnit: 20, unitsPerBox: 40, boxes: 25, looseUnits: 0, monthlyUnitsSold: 280 },
+            { id: "BEV-WEVERA-1L", name: "Wevera Purified Bottled Water 1L", category: "Other Beverage", costPriceUnit: 16, sellingPriceUnit: 25, unitsPerBox: 20, boxes: 40, looseUnits: 0, monthlyUnitsSold: 500 },
+            { id: "CIG-SURYA-LUX", name: "Surya Luxury Kings", category: "Cigarettes", costPriceUnit: 380, sellingPriceUnit: 420, unitsPerBox: 10, boxes: 30, looseUnits: 0, monthlyUnitsSold: 400 },
+            { id: "CIG-SHIKHAR-ICE", name: "Shikhar Ice", category: "Cigarettes", costPriceUnit: 230, sellingPriceUnit: 260, unitsPerBox: 10, boxes: 40, looseUnits: 0, monthlyUnitsSold: 550 },
+            { id: "CIG-PILOT-FILT", name: "Pilot Filter", category: "Cigarettes", costPriceUnit: 200, sellingPriceUnit: 230, unitsPerBox: 10, boxes: 25, looseUnits: 0, monthlyUnitsSold: 300 },
+            { id: "CIG-KHUKURI-FILT", name: "Khukuri Filter", category: "Cigarettes", costPriceUnit: 180, sellingPriceUnit: 210, unitsPerBox: 10, boxes: 25, looseUnits: 0, monthlyUnitsSold: 320 },
+            { id: "CIG-SHAAN-FILT", name: "Shaan Filter", category: "Cigarettes", costPriceUnit: 170, sellingPriceUnit: 200, unitsPerBox: 10, boxes: 20, looseUnits: 0, monthlyUnitsSold: 250 },
+            { id: "CIG-BIJULI-FILT", name: "Bijuli Filter", category: "Cigarettes", costPriceUnit: 150, sellingPriceUnit: 180, unitsPerBox: 10, boxes: 20, looseUnits: 0, monthlyUnitsSold: 280 },
+            { id: "GUT-AMRIT-PLUS", name: "Amrit Plus Gutkha", category: "Gutkha", costPriceUnit: 180, sellingPriceUnit: 220, unitsPerBox: 50, boxes: 15, looseUnits: 0, monthlyUnitsSold: 300 },
+            { id: "GUT-VOLA", name: "Vola Gutkha", category: "Gutkha", costPriceUnit: 160, sellingPriceUnit: 200, unitsPerBox: 50, boxes: 15, looseUnits: 0, monthlyUnitsSold: 280 },
+            { id: "SNACK-SID-PEANUT", name: "Siddhivinayak Salted Peanuts", category: "Snacks", costPriceUnit: 150, sellingPriceUnit: 200, unitsPerBox: 20, boxes: 15, looseUnits: 0, monthlyUnitsSold: 180 },
+            { id: "SNACK-SID-DALMOTH-S", name: "Siddhivinayak Mix Dalmoth (Small)", category: "Snacks", costPriceUnit: 120, sellingPriceUnit: 160, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 220 },
+            { id: "SNACK-SID-DALMOTH-M", name: "Siddhivinayak Mix Dalmoth (Medium)", category: "Snacks", costPriceUnit: 240, sellingPriceUnit: 300, unitsPerBox: 12, boxes: 20, looseUnits: 0, monthlyUnitsSold: 200 },
+            { id: "SNACK-SID-TADKA-S", name: "Siddhivinayak Punjabi Tadka Namkeen (Small)", category: "Snacks", costPriceUnit: 130, sellingPriceUnit: 170, unitsPerBox: 24, boxes: 18, looseUnits: 0, monthlyUnitsSold: 190 },
+            { id: "SNACK-SID-TADKA-M", name: "Siddhivinayak Punjabi Tadka Namkeen (Medium)", category: "Snacks", costPriceUnit: 260, sellingPriceUnit: 320, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 170 },
+            { id: "SNACK-SID-MOONG-S", name: "Siddhivinayak Moong Dalmoth (Small)", category: "Snacks", costPriceUnit: 140, sellingPriceUnit: 180, unitsPerBox: 24, boxes: 18, looseUnits: 0, monthlyUnitsSold: 200 },
+            { id: "SNACK-SID-MOONG-M", name: "Siddhivinayak Moong Dalmoth (Medium)", category: "Snacks", costPriceUnit: 270, sellingPriceUnit: 340, unitsPerBox: 12, boxes: 15, looseUnits: 0, monthlyUnitsSold: 160 },
+            { id: "SNACK-SID-BHUJIYA-S", name: "Siddhivinayak Plain Bhujiya (Small)", category: "Snacks", costPriceUnit: 120, sellingPriceUnit: 160, unitsPerBox: 24, boxes: 20, looseUnits: 0, monthlyUnitsSold: 240 },
+            { id: "SNACK-SID-BHUJIYA-M", name: "Siddhivinayak Plain Bhujiya (Medium)", category: "Snacks", costPriceUnit: 240, sellingPriceUnit: 300, unitsPerBox: 12, boxes: 18, looseUnits: 0, monthlyUnitsSold: 190 }
+        ];
+
+        let activeStore = JSON.parse(localStorage.getItem('sn_active_store')) || null;
+        let skuDatabase = [];
+        let currentSortField = null;
+        let currentSortAsc = true;
+        let html5QrCode = null;
+
+        function initApp() {
+            if (!activeStore) {
+                document.getElementById('setupModal').classList.remove('hidden');
+                document.getElementById('mainApp').classList.add('hidden');
+            } else {
+                document.getElementById('setupModal').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('headerStoreName').innerText = activeStore.name;
+                document.getElementById('headerPhone').innerText = activeStore.phone;
+
+                const dbKey = `sn_db_${activeStore.phone.replace(/\D/g, '')}`;
+                skuDatabase = JSON.parse(localStorage.getItem(dbKey)) || defaultCatalog;
+                renderAll();
+            }
+        }
+
+        function handleStoreSetup(e) {
+            e.preventDefault();
+            const name = document.getElementById('setupStoreName').value.trim();
+            const phone = document.getElementById('setupPhone').value.trim();
+            if (!name || !phone) return;
+
+            activeStore = { name, phone };
+            localStorage.setItem('sn_active_store', JSON.stringify(activeStore));
+            initApp();
+        }
+
+        function logoutStore() {
+            if (confirm("Switch store or log out?")) {
+                localStorage.removeItem('sn_active_store');
+                activeStore = null;
+                initApp();
+            }
+        }
+
+        function saveDatabase() {
+            if (!activeStore) return;
+            const dbKey = `sn_db_${activeStore.phone.replace(/\D/g, '')}`;
+            localStorage.setItem(dbKey, JSON.stringify(skuDatabase));
+            renderAll();
+        }
+
+        // --- CAMERA SCANNER LOGIC ---
+        function startScanner(mode) {
+            const containerId = mode === 'stockIn' ? 'stockInScannerContainer' : 'saleScannerContainer';
+            const readerId = mode === 'stockIn' ? 'stockInReader' : 'saleReader';
+            
+            document.getElementById(containerId).classList.remove('hidden');
+
+            if (html5QrCode) {
+                stopScanner(mode);
+            }
+
+            html5QrCode = new Html5Qrcode(readerId);
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 150 } },
+                (decodedText) => {
+                    if (mode === 'stockIn') {
+                        document.getElementById('stockInId').value = decodedText;
+                        handleStockInIdInput(decodedText);
+                    } else {
+                        document.getElementById('saleId').value = decodedText;
+                        handleSaleIdInput(decodedText);
+                    }
+                    stopScanner(mode);
+                },
+                (errorMessage) => {}
+            ).catch(err => {
+                alert("Unable to access camera. Ensure camera permissions are allowed.");
+                document.getElementById(containerId).classList.add('hidden');
+            });
+        }
+
+        function stopScanner(mode) {
+            const containerId = mode === 'stockIn' ? 'stockInScannerContainer' : 'saleScannerContainer';
+            document.getElementById(containerId).classList.add('hidden');
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch(err => {
+                    html5QrCode = null;
+                });
+            }
+        }
+
+        function setSort(field) {
+            if (currentSortField === field) {
+                currentSortAsc = !currentSortAsc;
+            } else {
+                currentSortField = field;
+                currentSortAsc = false;
+            }
+            updateSortIndicators();
+            renderTable();
+        }
+
+        function updateSortIndicators() {
+            ['capital', 'weeklyReturn1k', 'totalWeeklyProfit'].forEach(f => {
+                const el = document.getElementById(`sortIndicator-${f}`);
+                if (el) {
+                    if (currentSortField === f) {
+                        el.innerText = currentSortAsc ? '▲' : '▼';
+                    } else {
+                        el.innerText = '↕';
+                    }
+                }
+            });
+        }
+
+        function getStoredCategories() {
+            const defaultCats = ["Beer", "Wine", "Vodka", "Whiskey", "Rum", "Soft Drink", "Energy Drink", "Other Beverage", "Cigarettes", "Gutkha", "Snacks"];
+            const customCats = JSON.parse(localStorage.getItem('sn_coldstore_custom_cats')) || [];
+            const activeCats = new Set([...defaultCats, ...customCats]);
+            skuDatabase.forEach(item => { if (item.category) activeCats.add(item.category); });
+            return Array.from(activeCats);
+        }
+
+        function populateCategoryDropdown(selectedVal = "Beer") {
+            const select = document.getElementById('stockInCategory');
+            const categories = getStoredCategories();
+            select.innerHTML = categories.map(cat => `<option value="${cat}">${cat}</option>`).join('') + `<option value="__ADD_NEW__" class="text-emerald-400 font-bold">+ Add Custom Category...</option>`;
+            select.value = categories.includes(selectedVal) ? selectedVal : categories[0];
+        }
+
+        function handleCategoryChange(select) {
+            if (select.value === "__ADD_NEW__") {
+                const newCat = prompt("Enter new category name:");
+                if (newCat && newCat.trim() !== "") {
+                    const formatted = newCat.trim();
+                    let customCats = JSON.parse(localStorage.getItem('sn_coldstore_custom_cats')) || [];
+                    if (!customCats.includes(formatted)) {
+                        customCats.push(formatted);
+                        localStorage.setItem('sn_coldstore_custom_cats', JSON.stringify(customCats));
+                    }
+                    populateCategoryDropdown(formatted);
+                } else {
+                    populateCategoryDropdown("Beer");
+                }
+            }
+        }
+
+        function getTotalUnits(item) {
+            return ((item.boxes || 0) * (item.unitsPerBox || 1)) + (item.looseUnits || 0);
+        }
+
+        function getProcessDrivenMonthlySales(item) {
+            if (item.monthlyUnitsSold !== undefined && item.monthlyUnitsSold > 0) return item.monthlyUnitsSold;
+            return Math.round(getTotalUnits(item) * 0.5);
+        }
+
+        function getWeeklyReturnPer1000(item) {
+            const totalCapital = getTotalUnits(item) * item.costPriceUnit;
+            if (totalCapital <= 0) return 0;
+            const weeklyProfit = (getProcessDrivenMonthlySales(item) / 4.33) * (item.sellingPriceUnit - item.costPriceUnit);
+            return (weeklyProfit / totalCapital) * 1000;
+        }
+
+        function getTotalWeeklyProfit(item) {
+            return (getProcessDrivenMonthlySales(item) / 4.33) * (item.sellingPriceUnit - item.costPriceUnit);
+        }
+
+        function renderAll() {
+            renderTable();
+            updateStats();
+            updateCalcSelect();
+        }
+
+        function toggleCatalogDropdown() {
+            const content = document.getElementById('catalogContent');
+            const chevron = document.getElementById('catalogChevron');
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        function renderTable() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const tbody = document.getElementById('skuTableBody');
+            tbody.innerHTML = '';
+
+            let filtered = skuDatabase.filter(item => 
+                item.id.toLowerCase().includes(query) || 
+                item.name.toLowerCase().includes(query) || 
+                item.category.toLowerCase().includes(query)
+            );
+
+            if (currentSortField) {
+                filtered.sort((a, b) => {
+                    let valA, valB;
+                    if (currentSortField === 'capital') {
+                        valA = getTotalUnits(a) * a.costPriceUnit;
+                        valB = getTotalUnits(b) * b.costPriceUnit;
+                    } else if (currentSortField === 'weeklyReturn1k') {
+                        valA = getWeeklyReturnPer1000(a);
+                        valB = getWeeklyReturnPer1000(b);
+                    } else if (currentSortField === 'totalWeeklyProfit') {
+                        valA = getTotalWeeklyProfit(a);
+                        valB = getTotalWeeklyProfit(b);
+                    }
+                    return currentSortAsc ? (valA - valB) : (valB - valA);
+                });
+            }
+
+            document.getElementById('statTotalSkusBadge').innerText = `${skuDatabase.length} SKUs`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 text-xs">No matching SKU items found.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const totalUnits = getTotalUnits(item);
+                const totalCapital = totalUnits * item.costPriceUnit;
+                const weeklyReturn1k = getWeeklyReturnPer1000(item);
+                const totalWeeklyProfit = getTotalWeeklyProfit(item);
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 transition border-b border-slate-800/40 text-xs";
+                tr.innerHTML = `
+                    <td class="p-3">
+                        <div class="font-bold text-slate-200">${item.name}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">${item.id}</div>
+                    </td>
+                    <td class="p-3"><span class="px-2 py-0.5 font-semibold rounded-full bg-slate-800 text-slate-300 border border-slate-700">${item.category}</span></td>
+                    <td class="p-3">
+                        <div class="text-slate-200">${totalUnits.toLocaleString()} units</div>
+                        <div class="text-[10px] text-slate-400">${item.boxes || 0} box + ${item.looseUnits || 0} loose</div>
+                        <div class="text-[10px] text-emerald-500 font-semibold">Cap: Rs. ${totalCapital.toLocaleString()}</div>
+                    </td>
+                    <td class="p-3 font-semibold text-cyan-400">Rs. ${weeklyReturn1k.toFixed(1)} / wk</td>
+                    <td class="p-3 font-bold text-emerald-400">Rs. ${totalWeeklyProfit.toLocaleString(undefined, {maximumFractionDigits: 0})} / wk</td>
+                    <td class="p-3 text-right">
+                        <button onclick="deleteSku('${item.id}')" class="text-rose-400 hover:text-rose-300 bg-rose-950/40 border border-rose-900/50 px-2 py-1 rounded">Del</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateStats() {
+            const totalCapitalAll = skuDatabase.reduce((acc, item) => acc + (getTotalUnits(item) * item.costPriceUnit), 0);
+            let totalWeightedReturn = 0;
+            let totalMonthlyProfitAll = 0;
+
+            if (totalCapitalAll > 0) {
+                skuDatabase.forEach(item => {
+                    const cap = getTotalUnits(item) * item.costPriceUnit;
+                    const ret1k = getWeeklyReturnPer1000(item);
+                    totalWeightedReturn += (cap * ret1k);
+
+                    const monthlyProfit = getProcessDrivenMonthlySales(item) * (item.sellingPriceUnit - item.costPriceUnit);
+                    totalMonthlyProfitAll += monthlyProfit;
+                });
+            }
+            const portfolioWeeklyReturn1k = totalCapitalAll > 0 ? (totalWeightedReturn / totalCapitalAll) : 0;
+
+            document.getElementById('statTotalCapital').innerText = `Rs. ${totalCapitalAll.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+            document.getElementById('statMonthlyReturn').innerText = `Rs. ${totalMonthlyProfitAll.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+            document.getElementById('statPortfolioWeeklyReturn').innerText = `Rs. ${portfolioWeeklyReturn1k.toFixed(1)} / wk`;
+        }
+
+        function updateCalcSelect() {
+            const select = document.getElementById('calcSkuSelect');
+            select.innerHTML = '';
+            skuDatabase.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.innerText = `${item.id} - ${item.name}`;
+                select.appendChild(opt);
+            });
+            updateCalcPreview();
+        }
+
+        function updateCalcPreview() {
+            const selectId = document.getElementById('calcSkuSelect').value;
+            const item = skuDatabase.find(i => i.id === selectId);
+            if (!item) return;
+
+            const totalCapital = getTotalUnits(item) * item.costPriceUnit;
+            const weeklyProfit = getTotalWeeklyProfit(item);
+            const returnPer1k = getWeeklyReturnPer1000(item);
+
+            document.getElementById('previewCapital').innerText = `Rs. ${totalCapital.toLocaleString()}`;
+            document.getElementById('previewWeeklyProfit').innerText = `Rs. ${weeklyProfit.toLocaleString(undefined, {maximumFractionDigits: 1})}`;
+            document.getElementById('previewReturn').innerText = `Rs. ${returnPer1k.toFixed(2)} per 1k / wk`;
+        }
+
+        // --- STOCK IN MODAL ---
+        function openStockInModal() { 
+            populateCategoryDropdown("Beer");
+            document.getElementById('stockInModal').classList.remove('hidden'); 
+            document.getElementById('stockInBoxes').value = "1"; 
+            document.getElementById('stockInLooseUnits').value = "0"; 
+        }
+        function closeStockInModal() { 
+            stopScanner('stockIn');
+            document.getElementById('stockInModal').classList.add('hidden'); 
+            document.getElementById('stockInForm').reset(); 
+            document.getElementById('stockInIdSuggestions').classList.add('hidden'); 
+            document.getElementById('stockInNameSuggestions').classList.add('hidden'); 
+        }
+        
+        function handleStockInIdInput(val) {
+            const container = document.getElementById('stockInIdSuggestions');
+            if (!val.trim()) { container.classList.add('hidden'); return; }
+            const matches = skuDatabase.filter(i => i.id.toLowerCase().includes(val.toLowerCase()));
+            if (matches.length === 0) { container.classList.add('hidden'); return; }
+            container.innerHTML = matches.map(item => `<div onclick="selectStockInItem('${item.id}')" class="p-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800"><span class="font-bold text-emerald-400 font-mono">${item.id}</span> - ${item.name}</div>`).join('');
+            container.classList.remove('hidden');
+        }
+
+        function handleStockInNameInput(val) {
+            const container = document.getElementById('stockInNameSuggestions');
+            if (!val.trim()) { container.classList.add('hidden'); return; }
+            const matches = skuDatabase.filter(i => i.name.toLowerCase().includes(val.toLowerCase()));
+            if (matches.length === 0) { container.classList.add('hidden'); return; }
+            container.innerHTML = matches.map(item => `<div onclick="selectStockInItem('${item.id}')" class="p-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800"><div class="font-bold text-slate-200">${item.name}</div><div class="text-emerald-400 font-mono">${item.id}</div></div>`).join('');
+            container.classList.remove('hidden');
+        }
+
+        function selectStockInItem(id) {
+            const item = skuDatabase.find(i => i.id === id);
+            if (!item) return;
+            document.getElementById('stockInId').value = item.id;
+            document.getElementById('stockInName').value = item.name;
+            populateCategoryDropdown(item.category);
+            document.getElementById('stockInCost').value = item.costPriceUnit;
+            document.getElementById('stockInSell').value = item.sellingPriceUnit;
+            document.getElementById('stockInUnitsPerBox').value = item.unitsPerBox;
+            document.getElementById('stockInIdSuggestions').classList.add('hidden');
+            document.getElementById('stockInNameSuggestions').classList.add('hidden');
+        }
+
+        function handleStockInSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('stockInId').value.trim();
+            const name = document.getElementById('stockInName').value.trim();
+            const category = document.getElementById('stockInCategory').value;
+            const costPriceUnit = parseFloat(document.getElementById('stockInCost').value);
+            const sellingPriceUnit = parseFloat(document.getElementById('stockInSell').value);
+            const unitsPerBox = parseInt(document.getElementById('stockInUnitsPerBox').value) || 1;
+            const addBoxes = parseInt(document.getElementById('stockInBoxes').value) || 0;
+            const addLoose = parseInt(document.getElementById('stockInLooseUnits').value) || 0;
+
+            const existingIndex = skuDatabase.findIndex(i => i.id.toLowerCase() === id.toLowerCase());
+            if (existingIndex >= 0) {
+                skuDatabase[existingIndex].boxes = (skuDatabase[existingIndex].boxes || 0) + addBoxes;
+                skuDatabase[existingIndex].looseUnits = (skuDatabase[existingIndex].looseUnits || 0) + addLoose;
+                skuDatabase[existingIndex].costPriceUnit = costPriceUnit;
+                skuDatabase[existingIndex].sellingPriceUnit = sellingPriceUnit;
+                skuDatabase[existingIndex].category = category;
+            } else {
+                skuDatabase.push({ id, name, category, costPriceUnit, sellingPriceUnit, unitsPerBox, boxes: addBoxes, looseUnits: addLoose, monthlyUnitsSold: Math.round(((addBoxes * unitsPerBox) + addLoose) * 0.5) });
+            }
+            saveDatabase();
+            closeStockInModal();
+        }
+
+        // --- SALE MODAL ---
+        function openSaleModal() { 
+            document.getElementById('saleModal').classList.remove('hidden'); 
+            document.getElementById('saleBoxesSold').value = "0"; 
+            document.getElementById('saleLooseSold').value = "1"; 
+            document.getElementById('saleCustomPrice').value = ""; 
+            document.getElementById('saleCurrentStockDisplay').innerText = "0 units"; 
+        }
+        function closeSaleModal() { 
+            stopScanner('sale');
+            document.getElementById('saleModal').classList.add('hidden'); 
+            document.getElementById('saleForm').reset(); 
+            document.getElementById('saleIdSuggestions').classList.add('hidden'); 
+            document.getElementById('saleNameSuggestions').classList.add('hidden'); 
+        }
+        
+        function handleSaleIdInput(val) {
+            const container = document.getElementById('saleIdSuggestions');
+            if (!val.trim()) { container.classList.add('hidden'); return; }
+            const item = skuDatabase.find(i => i.id.toLowerCase() === val.toLowerCase());
+            if (item) {
+                selectSaleItem(item.id);
+                container.classList.add('hidden');
+                return;
+            }
+            const matches = skuDatabase.filter(i => i.id.toLowerCase().includes(val.toLowerCase()));
+            if (matches.length === 0) { container.classList.add('hidden'); return; }
+            container.innerHTML = matches.map(i => `<div onclick="selectSaleItem('${i.id}')" class="p-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800"><span class="font-bold text-cyan-400 font-mono">${i.id}</span> - ${i.name}</div>`).join('');
+            container.classList.remove('hidden');
+        }
+
+        function handleSaleNameInput(val) {
+            const container = document.getElementById('saleNameSuggestions');
+            if (!val.trim()) { container.classList.add('hidden'); return; }
+            const matches = skuDatabase.filter(i => i.name.toLowerCase().includes(val.toLowerCase()));
+            if (matches.length === 0) { container.classList.add('hidden'); return; }
+            container.innerHTML = matches.map(item => `<div onclick="selectSaleItem('${item.id}')" class="p-2 hover:bg-slate-800 cursor-pointer text-xs border-b border-slate-800"><div class="font-bold text-slate-200">${item.name}</div><div class="text-cyan-400 font-mono">${item.id}</div></div>`).join('');
+            container.classList.remove('hidden');
+        }
+
+        function selectSaleItem(id) {
+            const item = skuDatabase.find(i => i.id === id);
+            if (!item) return;
+            document.getElementById('saleId').value = item.id;
+            document.getElementById('saleName').value = item.name;
+            document.getElementById('saleCurrentStockDisplay').innerText = `${getTotalUnits(item)} units (${item.boxes || 0} box + ${item.looseUnits || 0} loose)`;
+            document.getElementById('saleIdSuggestions').classList.add('hidden');
+            document.getElementById('saleNameSuggestions').classList.add('hidden');
+        }
+
+        function handleSaleSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('saleId').value.trim();
+            const boxesSold = parseInt(document.getElementById('saleBoxesSold').value) || 0;
+            const looseSold = parseInt(document.getElementById('saleLooseSold').value) || 0;
+            const customPrice = document.getElementById('saleCustomPrice').value;
+
+            const existingIndex = skuDatabase.findIndex(i => i.id.toLowerCase() === id.toLowerCase());
+            if (existingIndex < 0) { alert("SKU not found! Use Stock In first."); return; }
+
+            let item = skuDatabase[existingIndex];
+            let upb = item.unitsPerBox || 1;
+            let totalUnitsSold = (boxesSold * upb) + looseSold;
+
+            if (totalUnitsSold <= 0) { alert("Please enter boxes or units sold!"); return; }
+
+            let currentTotalUnits = getTotalUnits(item);
+            if (totalUnitsSold > currentTotalUnits) { alert(`Only ${currentTotalUnits} units available in stock!`); return; }
+
+            let absoluteUnitsLeft = currentTotalUnits - totalUnitsSold;
+            item.boxes = Math.floor(absoluteUnitsLeft / upb);
+            item.looseUnits = absoluteUnitsLeft % upb;
+
+            if (customPrice !== "") item.sellingPriceUnit = parseFloat(customPrice);
+
+            saveDatabase();
+            closeSaleModal();
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#stockInId') && !e.target.closest('#stockInIdSuggestions')) document.getElementById('stockInIdSuggestions').classList.add('hidden');
+            if (!e.target.closest('#stockInName') && !e.target.closest('#stockInNameSuggestions')) document.getElementById('stockInNameSuggestions').classList.add('hidden');
+            if (!e.target.closest('#saleId') && !e.target.closest('#saleIdSuggestions')) document.getElementById('saleIdSuggestions').classList.add('hidden');
+            if (!e.target.closest('#saleName') && !e.target.closest('#saleNameSuggestions')) document.getElementById('saleNameSuggestions').classList.add('hidden');
+        });
+
+        function deleteSku(id) {
+            if (confirm("Delete SKU from active catalog?")) { skuDatabase = skuDatabase.filter(i => i.id !== id); saveDatabase(); }
+        }
+
+        function resetDemoData() {
+            if (confirm("Reset store database to default catalog?")) { 
+                if (activeStore) {
+                    const dbKey = `sn_db_${activeStore.phone.replace(/\D/g, '')}`;
+                    localStorage.removeItem(dbKey);
+                }
+                localStorage.removeItem('sn_coldstore_custom_cats');
+                skuDatabase = [...defaultCatalog]; 
+                saveDatabase(); 
+            }
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
