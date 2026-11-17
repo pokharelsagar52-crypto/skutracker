@@ -1,0 +1,13 @@
+{
+  "name": "skutracker",
+  "version": "1.0.0",
+  "description": "S&N Cold Store Inventory Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongodb": "^6.5.0"
+  }
+}
